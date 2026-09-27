@@ -4,6 +4,8 @@ A 70-second, 1080p, 24 fps short film rendered entirely from GLSL shaders, with 
 
 **Watch:** [`spacetime.mp4`](spacetime.mp4)
 
+![Contact sheet](contact-sheet.png)
+
 | Chapter | Time | What you see |
 |---|---|---|
 | Title | 0–7 s | Deep starfield and nebula |

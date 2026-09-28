@@ -1,0 +1,657 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Spacetime Reel</title>
+<!-- Vertical 9:16 cut of SPACETIME for Instagram Reels / Shorts / TikTok.
+     Captions sit inside the Reels safe zone (clear of the top ~12% header and bottom ~30% UI). -->
+<style>
+  @font-face { font-family: "Mont"; font-weight: 300; src: url(fonts/Montserrat-300.woff2) format("woff2"); }
+  @font-face { font-family: "Mont"; font-weight: 600; src: url(fonts/Montserrat-600.woff2) format("woff2"); }
+  html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 100vw; height: 100vh; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .cap {
+    position: absolute; left: 7%; right: 7%; text-align: center; color: #f2f6ff;
+    font-family: "Mont", "Liberation Sans", sans-serif; opacity: 0; will-change: transform, opacity, filter;
+    text-shadow: 0 0 3vw rgba(110,160,255,.55), 0 .3vw .8vw rgba(0,0,0,.85);
+  }
+  .kicker { display: block; font-weight: 600; font-size: 3.5vw; letter-spacing: .38em; padding-left: .38em;
+            color: #b8d2ff; margin-bottom: 1.6vw; }
+  .body { font-weight: 600; font-size: 6.1vw; line-height: 1.22; letter-spacing: .01em; }
+  .body i { font-style: normal; color: #ffd08a; text-shadow: 0 0 3vw rgba(255,170,80,.7), 0 .3vw .8vw rgba(0,0,0,.85); }
+  .body u { text-decoration: none; color: #8fd0ff; }
+  .top { top: 15.5%; }
+  .hook { top: 14%; }
+  .hook .l1 { font-weight: 600; font-size: 6.4vw; letter-spacing: .28em; padding-left: .28em; display: block; }
+  .hook .l2 { font-weight: 600; font-size: 11vw; letter-spacing: .02em; line-height: 1.05; display: block; margin: 1.5vw 0;
+              background: linear-gradient(90deg,#8fd0ff,#e6b8ff 50%,#ffd08a); -webkit-background-clip: text; background-clip: text; color: transparent;
+              text-shadow: none; filter: drop-shadow(0 0 3.5vw rgba(150,140,255,.55)); }
+  .hook .l3 { font-weight: 600; font-size: 6.4vw; letter-spacing: .28em; padding-left: .28em; display: block; }
+  .dim { top: 15.5%; font-weight: 600; font-size: 8.4vw; letter-spacing: .16em; padding-left: .16em; }
+  .dim small { display: block; font-size: .38em; letter-spacing: .5em; padding-left: .5em; color: #9ec0ff; margin-bottom: 1.2vw; }
+  .end { top: 14%; }
+  .end .e1 { font-weight: 600; font-size: 9.6vw; letter-spacing: .1em; line-height: 1.15; display: block; }
+  .end .e2 { font-weight: 300; font-size: 3.4vw; letter-spacing: .45em; padding-left: .45em; color: #9ec0ff; display: block; margin-top: 3vw; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="gl"></canvas>
+  <div class="cap hook" id="c_hook"><span class="l1">WHAT DOES THE</span><span class="l2">4TH DIMENSION</span><span class="l3">LOOK LIKE?</span></div>
+  <div class="cap top" id="c_mass"><span class="kicker">01 · CURVATURE</span><div class="body"><i>Mass</i> bends the fabric of spacetime</div></div>
+  <div class="cap top" id="c_wave"><span class="kicker">01 · CURVATURE</span><div class="body">Orbiting stars send out <u>gravitational waves</u></div></div>
+  <div class="cap top" id="c_time"><span class="kicker">02 · TIME</span><div class="body">Treat <i>time</i> as a direction, and an orbit becomes a <u>helix</u></div></div>
+  <div class="cap top" id="c_cone"><span class="kicker">02 · TIME</span><div class="body"><i>Light cones</i> split your possible future from your past</div></div>
+  <div class="cap dim" id="c_dim"></div>
+  <div class="cap top" id="c_tess"><span class="kicker">03 · THE 4TH DIMENSION</span><div class="body">A <u>tesseract</u>: a cube pushed into a direction we can't point to</div></div>
+  <div class="cap top" id="c_bh"><span class="kicker">04 · BLACK HOLE</span><div class="body">Gravity so extreme that <i>light</i> bends into a ring</div></div>
+  <div class="cap end" id="c_end"><span class="e1">SPACE AND TIME<br>ARE ONE</span><span class="e2">FOLLOW FOR MORE ✦</span></div>
+</div>
+
+<script id="vs" type="x-shader/x-vertex">#version 300 es
+in vec2 p; out vec2 uv;
+void main(){ uv = p*.5+.5; gl_Position = vec4(p,0.,1.); }
+</script>
+
+<!-- ======================= SCENE SHADER ======================= -->
+<script id="fs_scene" type="x-shader/x-fragment">#version 300 es
+precision highp float;
+in vec2 uv; out vec4 O;
+uniform vec2 R;          // resolution
+uniform float T;         // global time (s)
+uniform int S;           // scene id
+uniform float L;         // local scene time (s)
+uniform float Z;         // transition zoom
+uniform vec2 J;          // sub-pixel jitter (temporal supersampling)
+uniform vec3 V[16];      // tesseract vertices (camera space)
+uniform vec3 VR[16];     // their mirror image in the floor
+uniform float VW[16];    // w coordinate for colouring
+uniform float EW[4];     // edge weights per axis (dimension morph)
+uniform float PIT;       // tesseract camera pitch
+uniform float CZ;        // tesseract camera distance
+uniform float FY;        // tesseract floor height (world)
+uniform float SY;        // tesseract screen offset
+
+#define PI 3.14159265
+float h13(vec3 p3){ p3=fract(p3*.1031); p3+=dot(p3,p3.zyx+31.32); return fract((p3.x+p3.y)*p3.z); }
+vec3 h33(vec3 p3){ p3=fract(p3*vec3(.1031,.1030,.0973)); p3+=dot(p3,p3.yxz+33.33); return fract((p3.xxy+p3.yxx)*p3.zyx); }
+float n3(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
+  return mix(mix(mix(h13(i),h13(i+vec3(1,0,0)),f.x),mix(h13(i+vec3(0,1,0)),h13(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(h13(i+vec3(0,0,1)),h13(i+vec3(1,0,1)),f.x),mix(h13(i+vec3(0,1,1)),h13(i+vec3(1,1,1)),f.x),f.y),f.z); }
+float fbm(vec3 p){ float a=.5,s=0.; for(int i=0;i<5;i++){ s+=a*n3(p); p=p*2.03+vec3(1.7,9.2,3.1); a*=.5; } return s; }
+float fbm3(vec3 p){ float a=.5,s=0.; for(int i=0;i<3;i++){ s+=a*n3(p); p=p*2.03+vec3(1.7,9.2,3.1); a*=.5; } return s; }
+mat2 rot(float a){ float c=cos(a), s=sin(a); return mat2(c,-s,s,c); }
+
+// blackbody-ish colour ramp, k in ~[0,2]
+vec3 bb(float k){
+  vec3 c = mix(vec3(.9,.12,.02), vec3(1.,.45,.1), smoothstep(0.,.45,k));
+  c = mix(c, vec3(1.,.82,.6), smoothstep(.4,.9,k));
+  c = mix(c, vec3(.95,.95,1.), smoothstep(.85,1.3,k));
+  return mix(c, vec3(.6,.75,1.), smoothstep(1.25,2.,k));
+}
+
+// ---------- sky: stars + milky way ----------
+vec3 stars(vec3 rd){
+  vec3 col=vec3(0);
+  float px = 1.0/R.x;
+  for(int i=0;i<3;i++){
+    float sc = 90. + float(i)*110.;
+    vec3 p = rd*sc; vec3 id=floor(p); vec3 f=fract(p)-.5;
+    float h = h13(id+float(i)*31.7);
+    if(h>.968){
+      vec3 off=(h33(id)-.5)*.4;
+      float d=length(f-off)*1.6/(sc*px);           // distance in pixels
+      float b=(h-.968)/.032; b=b*b*b*4.+.12;
+      float k=h33(id*1.7).x;
+      vec3 tint=k<.3? vec3(1.,.7,.45) : k<.75 ? vec3(1.,.95,.9) : vec3(.62,.78,1.);
+      float s2=(1080.*px); s2*=s2;
+      col += tint*b*(exp(-d*d*s2*1.1) + .12*exp(-d*s2*.6));
+    }
+  }
+  return col;
+}
+vec3 nebula(vec3 rd){
+  vec3 bn = normalize(vec3(.3,1.,.2));
+  float lat = dot(rd,bn);
+  float n = fbm(rd*2.2+vec3(0,0,T*.01));
+  float m = fbm(rd*4.1+vec3(5.,1.,2.)+n*1.5);
+  float band = exp(-lat*lat*9.);
+  // milky-way core with dark dust lanes
+  float dust = smoothstep(.45,.75, fbm(rd*7.+m*1.2));
+  vec3 c = mix(vec3(.05,.02,.12), vec3(.02,.08,.18), m);
+  c += vec3(.28,.08,.32)*pow(max(m-.45,0.),2.)*3.;
+  c += vec3(.05,.16,.32)*pow(max(n-.5,0.),2.)*4.;
+  vec3 mw = mix(vec3(.35,.3,.45), vec3(.9,.7,.55), smoothstep(.3,.8,m))*band*band*(.6+.8*n);
+  c = c*c*6.*(.22+.9*band)*.55 + mw*.09*(1.-dust*.85);
+  return c;
+}
+vec3 sky(vec3 rd){ return stars(rd)+nebula(rd); }
+
+mat3 cam(vec3 ro, vec3 ta, float roll){
+  vec3 f=normalize(ta-ro), r=normalize(cross(f,vec3(sin(roll),cos(roll),0))), u=cross(r,f);
+  return mat3(r,u,f);
+}
+
+// glowing emissive body with corona rays (analytic closest approach)
+vec3 corona(vec3 ro, vec3 rd, vec3 C, vec3 base, float size, float seed){
+  float k=max(dot(C-ro,rd),0.); vec3 v=ro+rd*k-C; float d=length(v);
+  vec3 u=normalize(cross(rd,vec3(0,1,0))), w=cross(u,rd);
+  float ang=atan(dot(v,w),dot(v,u));
+  float rays = n3(vec3(ang*2.5+seed, T*.6, seed))*.6 + n3(vec3(ang*7.+seed, T*1.1, 2.))*.4;
+  rays = pow(rays,3.)*2.5;
+  float dn = d/size;
+  return base*( .05/(dn*dn+.02)*.35 + rays*exp(-dn*1.3)*.25 );
+}
+
+// ============ SCENE 1: spacetime fabric ============
+vec2 m1pos(float t, float sep){ return vec2(cos(t),sin(t))*sep; }
+float sep1(){ return mix(1.25,.55,smoothstep(0.,15.,L)); }
+float phase1(){ return L*1.3 + 1.3*smoothstep(4.,15.,L)*L*1.15; }
+float waveH(vec2 q){
+  float ph=phase1();
+  float r=length(q), th=atan(q.y,q.x);
+  float amp = .055*smoothstep(2.,9.,L)*(1.+1.8*smoothstep(8.,15.,L));
+  float ret = ph - r*.55;
+  return amp*sin(2.*th - 2.*ret)*smoothstep(.8,2.4,r)*2.2/sqrt(r+1.)*exp(-r*.03);
+}
+float fabric(vec2 q){
+  float s=sep1(), ph=phase1();
+  vec2 a=m1pos(ph,s), b=-a;
+  return -1.25/sqrt(dot(q-a,q-a)+.35) - .85/sqrt(dot(q-b,q-b)+.3) + waveH(q);
+}
+vec3 scene1(vec2 p){
+  float t=L;
+  float ca = .6+t*.07;
+  vec3 ro = vec3(cos(ca)*8.2, 6.6-t*.12, sin(ca)*8.2);
+  vec3 ta = vec3(0,-1.0,0);
+  vec3 rd = cam(ro,ta,0.)*normalize(vec3(p,1.55));
+  vec3 bg = sky(rd)*.8;
+  float s=sep1(), ph=phase1();
+  vec2 a=m1pos(ph,s), b=-a;
+  vec3 A=vec3(a.x, fabric(a)+.42, a.y), B=vec3(b.x, fabric(b)+.3, b.y);
+  float rA=.36, rB=.26;
+  float tS=1e9; vec3 sc=vec3(0);
+  for(int i=0;i<2;i++){
+    vec3 C = i==0?A:B; float r=i==0?rA:rB;
+    vec3 oc=ro-C; float bb_=dot(oc,rd), cc=dot(oc,oc)-r*r, h=bb_*bb_-cc;
+    if(h>0.){ float tt=-bb_-sqrt(h); if(tt>0.&&tt<tS){ tS=tt;
+      vec3 n=normalize(ro+rd*tt-C);
+      float mu=max(dot(n,-rd),0.);
+      float gr=fbm(n*9.+vec3(T*.35))*.7+fbm(n*22.-vec3(T*.5))*.3;   // granulation
+      vec3 base = i==0? vec3(1.,.62,.25):vec3(.45,.7,1.);
+      float limb = .45+.55*pow(mu,.5);                                 // limb darkening
+      sc = base*(2.4+2.6*gr)*limb + base*pow(1.-mu,3.)*2.;
+    }}
+  }
+  float tt=0.; bool hit=false; vec3 pos;
+  if(rd.y<0.){ tt=max(0.,(0.4-ro.y)/rd.y); }
+  for(int i=0;i<150;i++){
+    pos=ro+rd*tt;
+    float dh=pos.y-fabric(pos.xz);
+    if(dh<.002){ hit=true; break; }
+    tt+=dh*.45;
+    if(tt>60.) break;
+  }
+  vec3 col=bg;
+  if(hit && tt<tS){
+    vec2 q=pos.xz;
+    vec2 e=vec2(.01,0);
+    vec3 n=normalize(vec3(fabric(q-e.xy)-fabric(q+e.xy), 2.*e.x, fabric(q-e.yx)-fabric(q+e.yx)));
+    float gs=2.2;
+    vec2 g=q*gs; vec2 fw=fwidth(g)*1.2;
+    vec2 gl=abs(fract(g-.5)-.5)/max(fw,1e-4);
+    float line=1.-min(min(gl.x,gl.y),1.);
+    vec2 g2=q*gs/5.; vec2 fw2=fwidth(g2)*1.4;
+    vec2 gl2=abs(fract(g2-.5)-.5)/max(fw2,1e-4);
+    float line2=1.-min(min(gl2.x,gl2.y),1.);
+    vec2 g3=q*gs*4.; vec2 fw3=fwidth(g3)*1.2;                    // fine sub-grid, fades with distance
+    vec2 gl3=abs(fract(g3-.5)-.5)/max(fw3,1e-4);
+    float line3=(1.-min(min(gl3.x,gl3.y),1.))*smoothstep(.6,.15,max(fw3.x,fw3.y));
+    float depth=-fabric(q);
+    float wv = waveH(q);
+    vec3 lc = mix(vec3(.15,.55,1.), vec3(.9,.35,1.), smoothstep(.3,2.2,depth));
+    lc = mix(lc, vec3(.4,1.,.85), clamp(wv*6.,0.,1.)*.6);          // wave crests shimmer teal
+    float pulse = 1.+clamp(wv*9.,-.5,1.5);
+    float fade=exp(-tt*.045)*smoothstep(26.,10.,length(q));
+    float fr=pow(1.-abs(dot(n,rd)),3.);
+    vec3 surf = vec3(.004,.008,.025) + lc*fr*.12;
+    vec3 L1=normalize(A-pos), L2=normalize(B-pos);
+    vec3 hA=normalize(L1-rd), hB=normalize(L2-rd);
+    surf += vec3(1.,.6,.3)*(max(dot(n,L1),0.)*.35 + pow(max(dot(n,hA),0.),60.)*1.2)/(1.+dot(A-pos,A-pos)*.2);
+    surf += vec3(.4,.6,1.)*(max(dot(n,L2),0.)*.25 + pow(max(dot(n,hB),0.),60.)*.9)/(1.+dot(B-pos,B-pos)*.2);
+    vec3 fog = vec3(.006,.01,.03)+bg*.25;
+    col = mix(fog, surf + lc*(line*.8*pulse+line2*1.1+line3*.07)*1.25, fade);
+  } else if(tS<1e8){
+    col=sc;
+  }
+  for(int i=0;i<2;i++){
+    vec3 C = i==0?A:B; vec3 base = i==0? vec3(1.,.55,.2):vec3(.4,.65,1.);
+    float k=max(dot(C-ro,rd),0.);
+    if(!(hit && tt<k-0.5)) col += corona(ro,rd,C,base,i==0?1.:.8,float(i)*7.);
+  }
+  return col;
+}
+
+// ============ SCENE 2: worldlines / light cones ============
+float helixD(vec3 p, float R, float c){
+  float th=atan(p.z,p.x);
+  float per=2.*PI*c;
+  float dy=mod(p.y-c*th+per*.5,per)-per*.5;
+  float slope=1./sqrt(1.+ (c*c)/(R*R));
+  return length(vec2(length(p.xz)-R, dy*slope));
+}
+vec3 scene2(vec2 p){
+  float t=L;
+  float yNow = -3.5 + t*.62;
+  float ca = 1.1 + t*.11;
+  vec3 ro = vec3(cos(ca)*10.5, yNow*.55+3.6+t*.06, sin(ca)*10.5);
+  vec3 ta = vec3(0, yNow*.6+.0, 0);
+  vec3 rd = cam(ro,ta,0.)*normalize(vec3(p,1.6));
+  vec3 col = sky(rd)*.55;
+  float Rh=2.6, ch=.42;
+  vec3 glow=vec3(0);
+  float tt=0.;
+  float coneOn = smoothstep(4.,7.,t);
+  float thN = yNow/ch; vec3 P = vec3(cos(thN)*Rh, yNow, sin(thN)*Rh);
+  for(int i=0;i<120;i++){
+    vec3 q=ro+rd*tt;
+    float dh = helixD(q,Rh,ch);
+    dh = max(dh, q.y-yNow); dh=max(dh, -q.y-7.);
+    float ds = length(q.xz); ds=max(ds-.12, q.y-yNow); ds=max(ds,-q.y-7.);
+    vec3 c=q-P; float cd = abs(length(c.xz)-abs(c.y))*.7071;
+    float coneMask = step(abs(c.y),3.2)*coneOn;
+    float d = min(dh,ds);
+    float stepL = clamp(min(d, coneMask>0.? max(cd,.04):9.)*.6,.02,.6);
+    // time-ticks: bright beads travelling up the worldlines
+    float tick = .6+.8*pow(.5+.5*sin(q.y*6.-T*5.),8.);
+    glow += vec3(.25,.75,1.)*exp(-dh*9.)*stepL*1.4*tick;
+    glow += vec3(1.,.65,.25)*exp(-ds*7.)*stepL*1.6*tick;
+    vec3 ccol = c.y>0.? vec3(1.,.8,.3):vec3(.35,.5,1.);
+    float rings = .5+.5*cos(c.y*9.-T*4.);
+    glow += ccol*exp(-cd*28.)*stepL*coneMask*(.9+rings*.9)*exp(-abs(c.y)*.35);
+    glow += ccol*coneMask*stepL*.02*step(length(c.xz),abs(c.y))*step(abs(c.y),3.2);
+    tt+=stepL;
+    if(tt>40.) break;
+  }
+  col += glow;
+  float tp=(yNow-ro.y)/rd.y;
+  if(tp>0.){
+    vec3 q=ro+rd*tp; vec2 g=q.xz; vec2 fw=fwidth(g)*1.3;
+    vec2 gl=abs(fract(g-.5)-.5)/max(fw,1e-4);
+    float line=1.-min(min(gl.x,gl.y),1.);
+    float fade=smoothstep(9.,2.,length(q.xz));
+    col += vec3(.3,.5,1.)*line*fade*.55 + vec3(.05,.08,.2)*fade*.35;
+    float oc=abs(length(q.xz)-Rh);
+    col += vec3(.4,.8,1.)*exp(-oc*oc*400.)*fade*.8;
+  }
+  for(int k=1;k<7;k++){
+    float yk=yNow-float(k)*1.3; float tk=(yk-ro.y)/rd.y;
+    if(tk>0.){ vec3 q=ro+rd*tk; float oc=abs(length(q.xz)-Rh);
+      col += vec3(.3,.5,1.)*exp(-oc*oc*300.)*.18*exp(-float(k)*.3)*smoothstep(-7.,-6.,yk); }
+  }
+  vec3 S0=vec3(0,yNow,0);
+  col += corona(ro,rd,P,vec3(.5,.85,1.),.55,3.);
+  col += corona(ro,rd,S0,vec3(1.,.7,.3),.75,9.);
+  return col;
+}
+
+// ============ SCENE 3: tesseract (neon edges over a mirror floor) ============
+float segD(vec2 p, vec2 a, vec2 b, out float h){
+  vec2 pa=p-a, ba=b-a; h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-6),0.,1.);
+  return length(pa-ba*h);
+}
+vec3 edges(vec2 p, bool refl, float fl){
+  vec3 acc=vec3(0);
+  for(int i=0;i<16;i++){
+    for(int ax=0;ax<4;ax++){
+      int j = i ^ (1<<ax);
+      if(j<i) continue;
+      vec3 a=refl?VR[i]:V[i], b=refl?VR[j]:V[j];
+      vec2 A=a.xy/a.z*fl, B=b.xy/b.z*fl;
+      float h; float d=segD(p,A,B,h);
+      float z=mix(a.z,b.z,h);
+      float w=mix(VW[i],VW[j],h);
+      float wid = .0032*(6./z)*(refl?1.8:1.);
+      vec3 c = mix(vec3(.2,.7,1.), vec3(1.,.35,.85), smoothstep(-.8,.8,w));
+      if(ax==3) c=mix(c, vec3(1.,.85,.4), .35);
+      float e = EW[ax];
+      // energy pulses running along each edge
+      float pulse = exp(-pow(fract(h*.999 - T*.45 + float(i*4+ax)*.137)-.5,2.)*180.);
+      float core = smoothstep(wid,wid*.3,d);
+      acc += c*e*( core*(1.4+pulse*2.5) + exp(-d*70.)*.22 + exp(-d*12.)*.025 );
+      acc += vec3(1.)*e*core*.35;                                   // white-hot core
+    }
+  }
+  for(int i=0;i<16;i++){
+    vec3 a=refl?VR[i]:V[i];
+    vec2 A=a.xy/a.z*fl; float d=length(p-A);
+    acc += vec3(1.,.95,.9)*(.000012/(d*d+.00001))*min(EW[0]*4.+.4,1.);
+  }
+  return acc;
+}
+vec3 scene3(vec2 p){
+  float t=L;
+  float fl=2.0;
+  p.y -= SY;
+  vec3 rd=normalize(vec3(p,1.6)); rd.xz*=rot(t*.02+2.); rd.yz*=rot(.3);
+  vec3 col = sky(rd)*.5;
+  col += vec3(.08,.05,.18)*exp(-length(p-vec2(0,-.1))*2.2);
+  // mirror floor: ray from camera through pixel, back into world space
+  vec3 dc = normalize(vec3(p, fl));
+  float c=cos(PIT), s=sin(PIT);
+  // world = Rpitch^-1 (cam - (0,0,CZ))
+  vec3 o = vec3(0., c*0. + s*(-CZ), -s*0. + c*(-CZ));
+  vec3 dw = vec3(dc.x, c*dc.y + s*dc.z, -s*dc.y + c*dc.z);
+  float tf = (FY - o.y)/dw.y;
+  if(tf>0. && dw.y<0.){
+    vec3 q=o+dw*tf;
+    vec2 g=q.xz*2.; vec2 fw=fwidth(g)*1.3;
+    vec2 gl=abs(fract(g-.5)-.5)/max(fw,1e-4);
+    float line=1.-min(min(gl.x,gl.y),1.);
+    float fade=exp(-dot(q.xz,q.xz)*.035);
+    float fres = .08+.6*pow(1.-abs(dw.y),4.);
+    float far = smoothstep(45.,10.,tf);                       // fade the floor into the horizon
+    col = mix(col, mix(col*.4, vec3(.01,.012,.03), .85*fade), far);
+    col += vec3(.25,.35,.9)*line*fade*.35;
+    col += edges(p,true,fl)*fade*fres*.6;
+  }
+  col += edges(p,false,fl);
+  return col;
+}
+
+// ============ SCENE 4: black hole ============
+vec3 diskCol(vec3 pos, float r, vec3 v, out float dens){
+  float th=atan(pos.z,pos.x);
+  float om = 1./pow(r,1.5);
+  float a = th + om*T*3.;
+  float lr = log(r);
+  float n1 = fbm(vec3(lr*5., a*2., T*.05));
+  float st = fbm(vec3(lr*26.+n1*2.5, a*1.3, 3.));             // shear-stretched streaks
+  float n2 = fbm3(vec3(lr*60., a*.6, 7.));
+  dens = clamp(n1*.75+st*.75+n2*.25-.35,0.,1.);
+  dens *= smoothstep(2.6,3.2,r)*smoothstep(14.,6.,r);
+  // relativistic Doppler: disk orbits counter-clockwise, beta ~ sqrt(rs/2r)
+  float beta = sqrt(.5/r);
+  vec3 vel = normalize(vec3(-pos.z,0,pos.x));
+  float cosT = dot(vel,-v);
+  float g = sqrt(max(1.-1./r,.05)) / ((1.-beta*cosT)/sqrt(1.-beta*beta)) ;
+  g = 1./max(.25, 2.-g);                                        // soften extremes
+  float temp = pow(3./r,.75)*pow(max(1.-sqrt(2.6/r),0.),.25)*1.9;
+  float k = temp*g;
+  float I = pow(k,3.)*g*1.4;
+  return bb(k)*I*(.25+dens*1.6)*smoothstep(14.,9.,r);
+}
+vec3 scene4(vec2 p){
+  float t=L;
+  float ca = -.3+t*.05;
+  float dist = 33.-t*.65;
+  vec3 ro = vec3(sin(ca)*dist, 3.6-t*.14, -cos(ca)*dist);
+  vec3 rd = cam(ro,vec3(0,0,0),-.32)*normalize(vec3(p,1.45));
+  vec3 pos=ro, v=rd;
+  vec3 col=vec3(0); float alpha=1.;
+  vec3 hvec=cross(pos,v); float h2=dot(hvec,hvec);
+  bool cap=false;
+  for(int i=0;i<280;i++){
+    float r=length(pos);
+    float dt = clamp(.065*r,.018,1.5);
+    // midpoint integration of the photon orbit (rs = 1)
+    vec3 a1 = -1.5*h2*pos/pow(r,5.);
+    vec3 pm = pos + v*dt*.5; vec3 vm = normalize(v + a1*dt*.5);
+    float rm = length(pm);
+    vec3 a2 = -1.5*h2*pm/pow(rm,5.);
+    vec3 np = pos + vm*dt; vec3 nv = normalize(v + a2*dt);
+    if(pos.y*np.y<0.){
+      float f=pos.y/(pos.y-np.y); vec3 cp=mix(pos,np,f); float cr=length(cp);
+      if(cr>2.5 && cr<14.5){
+        float dens; vec3 dc=diskCol(cp,cr,normalize(v),dens);
+        float al = clamp(.35+dens*.6,0.,.97);
+        col += dc*alpha*al*1.1; alpha*=1.-al;
+      }
+    }
+    pos=np; v=nv;
+    if(length(pos)<1.0){ cap=true; break; }
+    if(length(pos)>60. || alpha<.02) break;
+  }
+  if(!cap) col += sky(v)*alpha*1.2;
+  return col;
+}
+
+void main(){
+  vec2 p=(gl_FragCoord.xy+J-.5*R)/R.x;   // width-normalised: vertical frame shows more sky and ground
+  p /= Z;
+  vec3 c;
+  if(S==1) c=scene1(p);
+  else if(S==2) c=scene2(p);
+  else if(S==3) c=scene3(p);
+  else c=scene4(p);
+  O=vec4(max(c,0.),1.);
+}
+</script>
+
+<!-- ======================= POST FX ======================= -->
+<script id="fs_down" type="x-shader/x-fragment">#version 300 es
+precision highp float; in vec2 uv; out vec4 O;
+uniform sampler2D tx; uniform vec2 px; uniform float thr;
+void main(){
+  vec3 c = texture(tx,uv+px*vec2(-1,-1)).rgb + texture(tx,uv+px*vec2(1,-1)).rgb
+         + texture(tx,uv+px*vec2(-1,1)).rgb + texture(tx,uv+px*vec2(1,1)).rgb;
+  c*=.25;
+  if(thr>0.){ float l=max(c.r,max(c.g,c.b)); c *= max(l-thr,0.)/max(l,1e-4); }
+  O=vec4(c,1.);
+}
+</script>
+<script id="fs_blur" type="x-shader/x-fragment">#version 300 es
+precision highp float; in vec2 uv; out vec4 O;
+uniform sampler2D tx; uniform vec2 dir;
+void main(){
+  float w[5] = float[](.227027,.1945946,.1216216,.054054,.016216);
+  vec3 c=texture(tx,uv).rgb*w[0];
+  for(int i=1;i<5;i++){ c+=texture(tx,uv+dir*float(i)*1.3).rgb*w[i]; c+=texture(tx,uv-dir*float(i)*1.3).rgb*w[i]; }
+  O=vec4(c,1.);
+}
+</script>
+<script id="fs_comp" type="x-shader/x-fragment">#version 300 es
+precision highp float; in vec2 uv; out vec4 O;
+uniform sampler2D tx, b1, b2, b3, b4, b5;
+uniform float fade, T, bloomAmt, flash, streak; uniform vec2 R;
+vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
+float h(vec2 p){ vec3 p3=fract(vec3(p.xyx)*.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
+void main(){
+  vec2 d = (uv-.5);
+  float ca = .003*dot(d,d)*4.;
+  vec3 c;
+  c.r = texture(tx, uv - d*ca).r;
+  c.g = texture(tx, uv).g;
+  c.b = texture(tx, uv + d*ca).b;
+  vec3 bl = texture(b1,uv).rgb*.9 + texture(b2,uv).rgb*1. + texture(b3,uv).rgb*1.1 + texture(b4,uv).rgb*1.2 + texture(b5,uv).rgb*1.4;
+  // anamorphic horizontal lens streak
+  vec3 an = vec3(0);
+  for(int i=-14;i<=14;i++){ float k=float(i); an += texture(b2, uv+vec2(k*.022,0.)).rgb*exp(-abs(k)*.22); }
+  c += bl*bloomAmt + an*vec3(.35,.55,1.)*.045*streak;
+  c *= 1.15 + flash;
+  c = aces(c);
+  // gentle teal/orange grade
+  float l = dot(c,vec3(.299,.587,.114));
+  c = mix(c, c*vec3(.92,1.,1.1), smoothstep(.5,0.,l)*.35);
+  c = mix(c, c*vec3(1.08,1.,.92), smoothstep(.4,1.,l)*.25);
+  c = pow(c, vec3(1./2.2));
+  float vig = smoothstep(1.25,.3,length(d*vec2(1.,R.y/R.x)*.8));
+  c *= mix(.6,1.,vig);
+  c += (h(gl_FragCoord.xy+fract(T*7.3)*500.)-.5)*.018;
+  c *= 1.-.5*smoothstep(.62,.9,uv.y);          // soft scrim behind captions
+  c *= fade;
+  O=vec4(c,1.);
+}
+</script>
+
+<script>
+const Q = new URLSearchParams(location.search);
+const cv = document.getElementById('gl');
+const W = +Q.get('w') || 540, H = +Q.get('h') || 960;
+const SPP = +Q.get('spp') || (Q.has('render') ? 2 : 1);   // temporal sub-samples per frame
+const FPS = +Q.get('fps') || 30;
+cv.width=W; cv.height=H;
+const gl = cv.getContext('webgl2',{preserveDrawingBuffer:true, antialias:false});
+if(!gl.getExtension('EXT_color_buffer_float')) console.warn('no float fbo');
+gl.getExtension('OES_texture_float_linear');
+
+function sh(type,src){ const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s)); return s; }
+function prog(fsId){ const p=gl.createProgram();
+  gl.attachShader(p,sh(gl.VERTEX_SHADER,document.getElementById('vs').text.trim()));
+  gl.attachShader(p,sh(gl.FRAGMENT_SHADER,document.getElementById(fsId).text.trim()));
+  gl.bindAttribLocation(p,0,'p'); gl.linkProgram(p);
+  if(!gl.getProgramParameter(p,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u={}; const n=gl.getProgramParameter(p,gl.ACTIVE_UNIFORMS);
+  for(let i=0;i<n;i++){ const a=gl.getActiveUniform(p,i); u[a.name.replace('[0]','')]=gl.getUniformLocation(p,a.name); }
+  return {p,u};
+}
+const P = { scene:prog('fs_scene'), down:prog('fs_down'), blur:prog('fs_blur'), comp:prog('fs_comp') };
+const vb=gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER,vb);
+gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,2,gl.FLOAT,false,0,0);
+
+function target(w,h){ const t=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,t);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA16F,w,h,0,gl.RGBA,gl.HALF_FLOAT,null);
+  for(const k of [gl.TEXTURE_MIN_FILTER,gl.TEXTURE_MAG_FILTER]) gl.texParameteri(gl.TEXTURE_2D,k,gl.LINEAR);
+  for(const k of [gl.TEXTURE_WRAP_S,gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D,k,gl.CLAMP_TO_EDGE);
+  const f=gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER,f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,t,0);
+  return {t,f,w,h}; }
+const main = target(W,H);
+const lv=[]; let w=W,h=H;
+for(let i=0;i<5;i++){ w=Math.max(1,w>>1); h=Math.max(1,h>>1); lv.push({a:target(w,h),b:target(w,h)}); }
+
+function draw(pr, tgt){ gl.useProgram(pr.p); gl.bindFramebuffer(gl.FRAMEBUFFER,tgt?tgt.f:null);
+  gl.viewport(0,0,tgt?tgt.w:W,tgt?tgt.h:H); }
+function tex(pr,name,t,unit){ gl.activeTexture(gl.TEXTURE0+unit); gl.bindTexture(gl.TEXTURE_2D,t); gl.uniform1i(pr.u[name],unit); }
+
+// ---------------- timeline ----------------
+// [scene, start, end, local-time speed, local-time offset, variant]
+const SEG = [
+  [3, 0, 4, 1.0, 13.0, 'hook'],      // hook: fully formed tesseract spinning
+  [1, 4, 17, 1.2, 0, ''],            // curvature + gravitational waves
+  [2, 17, 28, 1.05, 0, ''],          // worldlines + light cones
+  [3, 28, 42, 1.0, 0, 'morph'],      // point -> line -> square -> cube -> tesseract
+  [4, 42, 55, 1.0, 0, ''],           // black hole
+  [3, 55, 60, 1.0, 13.0, 'hook'],    // loop back to the opening shot
+];
+const DURATION = 60, XF = .38;       // crossfade half-width (s)
+const ss=(a,b,x)=>{ const t=Math.min(Math.max((x-a)/(b-a),0),1); return t*t*(3-2*t); };
+const win=(t,a,b,f=0.8)=>ss(a,a+f,t)*(1-ss(b-f,b,t));
+
+function tesseract(t, variant){
+  const hook = variant==='hook';
+  const E = hook ? [1,1,1,1] : [ss(1.2,2.4,t), ss(3.2,4.4,t), ss(5.2,6.4,t), ss(7.4,8.8,t)];
+  const V=[], VR=[], VW=[];
+  const a1 = Math.max(0,t-8.8)*.55, a2=Math.max(0,t-9.5)*.33;
+  const yaw = .35 + t*.05 + Math.max(0,t-7)*.14, pitch = -(.3 + Math.sin(t*.3)*.05);
+  const CZ = hook ? 6.0 : 6.2, FY = -1.12, sc=.55;
+  const c0=Math.cos(pitch), s0=Math.sin(pitch);
+  const toCam=(x,y,z)=>[x, c0*y-s0*z, s0*y+c0*z + CZ];
+  for(let i=0;i<16;i++){
+    let x=(i&1?1:-1)*E[0], y=(i&2?1:-1)*E[1], z=(i&4?1:-1)*E[2], ww=(i&8?1:-1)*E[3];
+    let c=Math.cos(a1), s=Math.sin(a1); [x,ww]=[c*x-s*ww, s*x+c*ww];
+    c=Math.cos(a2); s=Math.sin(a2); [y,ww]=[c*y-s*ww, s*y+c*ww];
+    c=Math.cos(a2*.7); s=Math.sin(a2*.7); [z,ww]=[c*z-s*ww, s*z+c*ww];
+    const k = 3.0/(3.0-ww*.9);
+    x*=k; y*=k; z*=k;
+    c=Math.cos(yaw); s=Math.sin(yaw); [x,z]=[c*x+s*z, -s*x+c*z];
+    x*=sc; y*=sc; z*=sc;
+    V.push(...toCam(x,y+.1,z)); VR.push(...toCam(x,2*FY-(y+.1),z)); VW.push(ww);
+  }
+  return {V,VR,VW,E,pitch,CZ,FY};
+}
+
+const caps = [
+  ['c_hook', 0.0, 3.85],
+  ['c_mass', 4.5, 10.6], ['c_wave', 10.9, 16.6],
+  ['c_time', 17.5, 22.6], ['c_cone', 22.9, 27.6],
+  ['c_tess', 37.0, 41.7],
+  ['c_bh', 43.0, 54.6],
+  ['c_end', 55.4, 60.5],
+];
+const dimNames=[[28.3,29.7,'0D','POINT'],[29.7,31.7,'1D','LINE'],[31.7,33.7,'2D','SQUARE'],[33.7,35.4,'3D','CUBE'],[35.4,36.9,'4D','TESSERACT']];
+const el={}; for(const c of caps) el[c[0]]=document.getElementById(c[0]);
+const dimEl=document.getElementById('c_dim');
+
+function drawScene(seg, t, weight, zoom, jx, jy){
+  const [sid, a, , spd, off, variant] = seg;
+  const lt=(t-a)*spd+off;
+  const sp=P.scene; draw(sp, main);
+  gl.uniform2f(sp.u.R,W,H); gl.uniform1f(sp.u.T,t); gl.uniform1i(sp.u.S,sid); gl.uniform1f(sp.u.L,lt);
+  gl.uniform1f(sp.u.Z,zoom); gl.uniform2f(sp.u.J,jx,jy);
+  if(sid===3){ const q=tesseract(lt,variant);
+    gl.uniform3fv(sp.u.V,q.V); gl.uniform3fv(sp.u.VR,q.VR); gl.uniform1fv(sp.u.VW,q.VW); gl.uniform1fv(sp.u.EW,q.E);
+    gl.uniform1f(sp.u.PIT,q.pitch); gl.uniform1f(sp.u.CZ,q.CZ); gl.uniform1f(sp.u.FY,q.FY);
+    gl.uniform1f(sp.u.SY, variant==='hook' ? -.3 : -.14); }
+  gl.blendColor(0,0,0,weight);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+}
+
+// R2 low-discrepancy jitter
+const jit = n => [((n*0.7548776662) % 1) - .5, ((n*0.5698402910) % 1) - .5];
+
+function frame(t){
+  gl.bindFramebuffer(gl.FRAMEBUFFER, main.f); gl.viewport(0,0,W,H);
+  gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.CONSTANT_ALPHA, gl.ONE);
+  let flash = 0, sidMain = 3;
+  for(let sN=0; sN<SPP; sN++){
+    const ts = t + (SPP>1 ? (sN/(SPP-1)-.5)*.4/FPS : 0);   // ~144° shutter
+    const [jx,jy] = SPP>1 ? jit(sN+1) : [0,0];
+    for(let i=0;i<SEG.length;i++){
+      const s=SEG[i], a=s[1], b=s[2];
+      if(ts < a-XF || ts >= b+XF) continue;
+      let wgt=1, zoom=1;
+      if(i>0 && ts < a+XF){ const k=ss(a-XF,a+XF,ts); wgt*=k; zoom*=1+.22*(1-k); }        // arriving
+      if(i<SEG.length-1 && ts >= b-XF){ const k=ss(b-XF,b+XF,ts); wgt*=1-k; zoom*=1/(1+.3*k); } // leaving
+      if(i===0 && ts<a) continue;
+      if(i===SEG.length-1 && ts>=b) { wgt=1; zoom=1; }
+      if(wgt<.002) continue;
+      if(wgt>.5) sidMain=s[0];
+      drawScene(s, Math.max(0,ts), wgt/SPP, zoom, jx, jy);
+    }
+  }
+  gl.disable(gl.BLEND);
+  for(const s of SEG) flash += .55*Math.exp(-Math.pow((t-s[1])/.16,2))*(s[1]>0?1:0);
+
+  let src=main;
+  for(let i=0;i<5;i++){
+    const Lv=lv[i];
+    draw(P.down, Lv.a); tex(P.down,'tx',src.t,0); gl.uniform2f(P.down.u.px,.5/src.w,.5/src.h); gl.uniform1f(P.down.u.thr, i===0? .55:0.); gl.drawArrays(gl.TRIANGLES,0,3);
+    draw(P.blur, Lv.b); tex(P.blur,'tx',Lv.a.t,0); gl.uniform2f(P.blur.u.dir,1/Lv.a.w,0); gl.drawArrays(gl.TRIANGLES,0,3);
+    draw(P.blur, Lv.a); tex(P.blur,'tx',Lv.b.t,0); gl.uniform2f(P.blur.u.dir,0,1/Lv.a.h); gl.drawArrays(gl.TRIANGLES,0,3);
+    src=Lv.a;
+  }
+  const cp=P.comp; draw(cp,null);
+  tex(cp,'tx',main.t,0); for(let i=0;i<5;i++) tex(cp,'b'+(i+1),lv[i].a.t,i+1);
+  gl.uniform1f(cp.u.fade, 1.0); gl.uniform1f(cp.u.T,t); gl.uniform2f(cp.u.R,W,H);
+  gl.uniform1f(cp.u.flash, flash);
+  gl.uniform1f(cp.u.bloomAmt, sidMain===4? .45 : .75);
+  gl.uniform1f(cp.u.streak, sidMain===4? 1.3 : sidMain===1 ? 1.0 : .7);
+  gl.drawArrays(gl.TRIANGLES,0,3);
+  gl.finish();
+
+  // captions: fade + rise + un-blur
+  for(const [id,s,e] of caps){
+    const inK = id==='c_hook' ? 1 : ss(s,s+.45,t);
+    const o = id==='c_hook' ? (1-ss(e-.35,e,t)) : win(t,s,e,.45);
+    el[id].style.opacity = o.toFixed(3);
+    el[id].style.transform = `translateY(${((1-inK)*3).toFixed(2)}vw) scale(${(1+.06*(1-inK)).toFixed(3)})`;
+    el[id].style.filter = `blur(${((1-inK)*1.2).toFixed(2)}vw)`;
+  }
+  let dop=0, html='';
+  for(const [s,e,a,b] of dimNames) if(t>=s&&t<e){ html=`<small>${a}</small>${b}`; dop=win(t,s,e,.3); }
+  if(dimEl.innerHTML!==html) dimEl.innerHTML=html;
+  dimEl.style.opacity=dop.toFixed(3);
+}
+window.frame=frame; window.DURATION=DURATION; window.ready=document.fonts.ready.then(()=>true);
+
+if(!Q.has('render')){
+  const t0=performance.now(); const loop=()=>{ frame(((performance.now()-t0)/1000)%DURATION); requestAnimationFrame(loop); }; loop();
+}
+</script>
+</body>
+</html>

@@ -15,6 +15,30 @@ A 70-second, 1080p, 24 fps short film rendered entirely from GLSL shaders, with 
 | IV · The edge of spacetime | 50–63 s | A Schwarzschild black hole, rendered by integrating bent light rays. It shows gravitational lensing, the photon ring, an accretion disk with Doppler beaming, and lensed background stars. |
 | Outro | 63–70 s | "Space and time are one" |
 
+## Instagram Reel cut (9:16)
+
+**Watch:** [`spacetime_reel.mp4`](spacetime_reel.mp4): 1080×1920, 30 fps, 60 s, loudness-normalised to −14 LUFS.
+
+![Reel contact sheet](reel-contact-sheet.png)
+
+`reel.html` is a re-edit built for phones:
+
+- **Hook in frame one.** It opens on a spinning tesseract with "What does the 4th dimension look like?" and an impact sound, with no fade-in from black.
+- **Faster pacing.** Five chapters in 60 s, joined by punch-zoom crossfades and a light flash instead of dips to black.
+- **Loops cleanly.** The final shot returns to the opening tesseract and chord, so the replay is seamless.
+- **Safe zones.** Captions are large, bold and sit between roughly 14% and 35% of the frame height, clear of the Reels header and the caption and like UI at the bottom. A soft scrim keeps them readable.
+- **Upgraded visuals:**
+  - Temporal supersampling (2 jittered sub-frames with a ~144° shutter) for anti-aliasing and motion blur.
+  - A black-hole disk with blackbody colour, relativistic Doppler beaming and redshift, shear-stretched turbulence, and midpoint ray integration.
+  - A mirror floor with reflections and energy pulses along the tesseract's edges.
+  - Stars with granulation, limb darkening and animated coronas.
+  - Specular highlights on the spacetime fabric, with wave crests that light up.
+  - A Milky Way band with dust lanes, anamorphic lens streaks and a teal/orange grade.
+
+```bash
+./build_reel.sh             # or: W=540 H=960 SPP=1 ./build_reel.sh for a quick preview
+```
+
 ## How it's made
 
 - `index.html` holds all visuals: a WebGL2 scene shader (raymarching, heightfield marching and null-geodesic integration) and an HDR post-processing chain (5-level bloom, ACES tonemapping, chromatic aberration, vignette, film grain and 2.39:1 letterbox). Opened directly in a browser, it plays in real time.

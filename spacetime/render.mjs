@@ -1,5 +1,5 @@
 // Renders index.html frame-by-frame in headless Chromium and pipes PNGs into ffmpeg.
-// usage: node render.mjs --w 1920 --h 1080 --fps 30 --out spacetime.mp4 [--from 0 --to 70] [--stills 5,12,30]
+// usage: node render.mjs [--page reel.html] --w 1920 --h 1080 --fps 30 [--spp 2] --out spacetime.mp4 [--from 0 --to 70] [--stills 5,12,30]
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -17,9 +17,11 @@ const browser = await chromium.launch({
          '--allow-file-access-from-files'],
 });
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
+page.setDefaultTimeout(0);
 page.on('console', m => console.log('[page]', m.text()));
 page.on('pageerror', e => { console.error('[pageerror]', e); process.exit(1); });
-await page.goto(pathToFileURL(path.join(here, 'index.html')).href + `?render&w=${W}&h=${H}`);
+const pageFile = args.page || 'index.html';
+await page.goto(pathToFileURL(path.join(here, pageFile)).href + `?render&w=${W}&h=${H}&fps=${FPS}` + (args.spp ? `&spp=${args.spp}` : ''));
 await page.evaluate(() => window.ready);
 
 if (args.stills) {
@@ -27,7 +29,7 @@ if (args.stills) {
   for (const t of args.stills.split(',').map(Number)) {
     const t0 = Date.now();
     await page.evaluate(t => window.frame(t), t);
-    await page.screenshot({ path: path.join(here, 'stills', `t${String(t).padStart(5, '0')}.png`) });
+    await page.screenshot({ path: path.join(here, 'stills', `${args.prefix || 't'}${String(t).padStart(5, '0')}.png`) });
     console.log(`still t=${t}s  ${Date.now() - t0}ms`);
   }
   await browser.close();

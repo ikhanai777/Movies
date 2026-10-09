@@ -64,7 +64,7 @@ export const Outro: React.FC<{ t: number }> = ({ t }) => {
         {/* parked nozzle rises with the print, like a real time-lapse frame */}
         {nozOut < 1 && buildP > 0 && (
           <g opacity={1 - nozOut}>
-            <Nozzle x={VASE.cx + topR + 70} tip={topY - 8 - nozOut * 60} />
+            <Nozzle x={VASE.cx + topR + 70} tip={topY - 8} />
           </g>
         )}
       </g>

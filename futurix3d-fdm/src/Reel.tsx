@@ -49,7 +49,7 @@ const trStyle = (tr: Tr, role: "in" | "out", p: number): React.CSSProperties => 
         : { opacity: p, transform: about(540, 800, lerp(1.25, 1, p)) };
     case "zoom":
       return role === "out"
-        ? { opacity: clamp01(1 - p * 1.6), transform: about(tr.out[0], tr.out[1], lerp(1, 3.2, p)) }
+        ? { opacity: clamp01(1 - p * 2.4), transform: about(tr.out[0], tr.out[1], lerp(1, 3.2, p)) }
         : { opacity: clamp01(p * 1.6 - 0.4), transform: about(tr.in[0], tr.in[1], lerp(0.45, 1, p)) };
     case "wipe":
       return role === "out" ? { opacity: p >= 1 ? 0 : 1 } : { clipPath: `inset(0 ${(1 - p) * 100}% 0 0)` };
